@@ -6,3 +6,5 @@ build/*
 *.orig
 *~
 .*
+layout/build
+CMakeLists.txt.user

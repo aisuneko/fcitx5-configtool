@@ -13,13 +13,26 @@
 #include <QAbstractNativeEventFilter>
 #include <QMap>
 #include <QWidget>
-#include <vector>
+#include <QGuiApplication>
+
+#ifndef ENABLE_X11
+#include <xkbcommon/xkbcommon.h>
+#endif
 
 class QPainter;
 struct Doodad;
 struct _XkbDesc;
+struct xkb_context;
 struct _XkbShapeDoodad;
 union _XkbDoodad;
+
+#ifndef ENABLE_X11
+struct _XkbGeometry;
+struct _XkbIndicatorRec;
+struct _XkbNamesRec;
+struct _XkbDesc;
+struct _clientState;
+#endif
 
 typedef enum {
     KEYBOARD_DRAWING_ITEM_TYPE_INVALID = 0,
@@ -59,6 +72,80 @@ struct Doodad : public DrawingItem {
     union _XkbDoodad *doodad;
     int on;
 };
+
+#ifndef ENABLE_X11
+typedef struct _XkbGeometry{
+    // Atom name;
+    unsigned short width_mm;
+    unsigned short height_mm;
+    // char *label_font;
+    // XkbColorPtr label_color;
+    // XkbColorPtr base_color;
+    // unsigned short sz_properties;
+    // unsigned short sz_colors;
+    // unsigned short sz_shapes;
+    // unsigned short sz_sections;
+    // unsigned short sz_doodads;
+    // unsigned short sz_key_aliases;
+    // unsigned short num_properties;
+    unsigned short num_colors;
+    unsigned short num_shapes;
+    unsigned short num_sections;
+    unsigned short num_doodads;
+    // unsigned short num_key_aliases;
+    // XkbPropertyPtr properties;
+    XkbColorPtr colors;
+    XkbShapePtr shapes;
+    XkbSectionPtr sections;
+    XkbDoodadPtr doodads;
+    // XkbKeyAliasPtr key_aliases;
+} *XkbGeometryPtr;
+
+typedef struct _XkbIndicatorRec {
+    unsigned long phys_indicators; // xkb_led_index_t?
+} *XkbIndicatorPtr;
+
+typedef struct _XkbNamesRec {
+    // Atom keycodes;
+    // Atom geometry;
+    // Atom symbols;
+    // Atom types;
+    // Atom compat;
+    // Atom vmods[XkbNumVirtualMods];
+    Atom indicators[XkbNumIndicators];
+    // Atom groups[XkbNumKbdGroups];
+    // XkbKeyNamePtr keys;
+    // XkbKeyAliasPtr key_aliases;
+    // Atom *radio_groups;
+    // Atom phys_symbols;
+
+    // unsigned char num_keys;
+    // unsigned char num_key_aliases;
+    // unsigned short num_rg;
+} *XkbNamesPtr;
+
+struct _XkbDesc {
+    // unsigned int defined;
+    // unsigned short flags;
+    // unsigned short device_spec;
+    xkb_keycode_t min_key_code;
+    xkb_keycode_t max_key_code;
+
+    // XkbControlsPtr ctrls;
+    // XkbServerMapPtr server;
+    // XkbClientMapPtr map;
+    XkbIndicatorPtr indicators;
+    XkbNamesPtr names;
+    // XkbCompatMapPtr compat;
+    XkbGeometryPtr geom;
+};
+struct _clientState {
+    struct xkb_state *XkbState = nullptr;
+    struct xkb_context *XkbContext = nullptr;
+    struct xkb_keymap *XkbKeymap = nullptr;
+    // struct touch_event touch_event;
+};
+#endif
 
 struct DrawingKey : public DrawingItem {
     DrawingKey() : xkbkey(0), pressed(false), keycode(0) {}
@@ -141,6 +228,10 @@ private:
     std::vector<DrawingKey> keys;
     QList<Doodad *> physicalIndicators;
     struct _XkbDesc *xkb = nullptr;
+    #ifndef ENABLE_X11
+    struct _clientState *clientState;
+    QPlatformNativeInterface *interface = nullptr;
+    #endif
     unsigned int l3mod = 0;
     std::vector<QColor> colors;
     QPixmap image;

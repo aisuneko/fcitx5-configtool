@@ -12,6 +12,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QVector2D>
+#include <qpa/qplatformnativeinterface.h>
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 #include <QX11Info>
 #endif
@@ -20,12 +21,18 @@
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/misc.h>
 
+#ifdef ENABLE_X11
 #include <X11/XKBlib.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XKBgeom.h>
 #include <X11/extensions/XKBrules.h>
 #include <X11/extensions/XKBstr.h>
 #include <X11/keysym.h>
+#else
+#include <wayland-client.h>
+#include <xkbcommon/xkbcommon.h>
+#include <sys/mman.h>
+#endif
 
 #include "config.h"
 
@@ -33,7 +40,6 @@
 #undef KeyRelease
 
 #include <math.h>
-
 #include "deadmapdata.h"
 #include "keyboardlayoutwidget.h"
 
@@ -56,7 +62,9 @@ auto *getXDisplay() { return QX11Info::display(); }
 bool isPlatformX11() {
     return qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
 }
-
+bool isPlatformWayland(){
+    return qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>();
+}
 auto *getXDisplay() {
     return qGuiApp->nativeInterface<QNativeInterface::QX11Application>()
         ->display();
@@ -119,33 +127,86 @@ static QString FcitxXkbFindXkbRulesFile() {
 
     return rulesFile;
 }
+#ifndef ENABLE_X11
 
+static void handleKeymap(void *data, struct wl_keyboard *keyboard,
+                                   uint32_t format, int fd, uint32_t size){
+    assert(format == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1);
+    struct _clientState *clientState = (struct _clientState *) data;
+
+    char *mapShm = (char*) mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    assert(mapShm != MAP_FAILED);
+
+    struct xkb_context *XkbContext = clientState->XkbContext;
+    struct xkb_keymap *XkbKeymap = xkb_keymap_new_from_string(
+        XkbContext, mapShm, XKB_KEYMAP_FORMAT_TEXT_V1,
+        XKB_KEYMAP_COMPILE_NO_FLAGS);
+    munmap(mapShm, size);
+    close(fd);
+
+    struct xkb_state *XkbState = xkb_state_new(XkbKeymap);
+    xkb_keymap_unref(clientState->XkbKeymap);
+    xkb_state_unref(clientState->XkbState);
+    clientState->XkbKeymap = XkbKeymap;
+    clientState->XkbState = XkbState;
+}
+static const struct wl_keyboard_listener keyboardListener = {
+    .keymap = handleKeymap,
+};
+#endif
 KeyboardLayoutWidget::KeyboardLayoutWidget(QWidget *parent)
     : QWidget(parent), groupLevels(pGroupsLevels) {
     for (unsigned int i = 0; i < FCITX_ARRAY_SIZE(deadMapData); i++) {
         deadMap[deadMapData[i].dead] = deadMapData[i].nondead;
     }
-
+    #ifdef ENABLE_X11
     if (isPlatformX11()) {
         xkb = XkbGetKeyboard(getXDisplay(),
                              XkbGBN_GeometryMask | XkbGBN_KeyNamesMask |
                                  XkbGBN_OtherNamesMask | XkbGBN_SymbolsMask |
                                  XkbGBN_IndicatorMapMask,
                              XkbUseCoreKbd);
+        if (!xkb) {
+            return;
+        }
+
+        XkbGetNames(getXDisplay(), XkbAllNamesMask, xkb);
+        l3mod = XkbKeysymToModifiers(getXDisplay(), XK_ISO_Level3_Shift);
+
+        alloc();
+        init();
+        initColors();
+
+        setFocusPolicy(Qt::StrongFocus);
     }
+    #else
+    if (isPlatformWayland()){
+        interface = qGuiApp->platformNativeInterface();
+        wl_keyboard *keyboard =
+            qGuiApp->nativeInterface<QNativeInterface::QWaylandApplication>()->keyboard();
 
-    if (!xkb) {
-        return;
+        clientState->XkbContext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        if(!clientState->XkbContext || !keyboard){
+            return;
+        }
+        wl_keyboard_add_listener(keyboard, &keyboardListener, clientState);
+
+        if(clientState->XkbKeymap){
+            xkb = new _XkbDesc;
+            xkb->min_key_code = xkb_keymap_min_keycode(clientState->XkbKeymap);
+            xkb->max_key_code = xkb_keymap_max_keycode(clientState->XkbKeymap);
+            XkbIndicatorPtr XkbIndicatorPtr = new _XkbIndicatorRec{
+                static_cast<unsigned long>(xkb_keymap_num_leds(clientState->XkbKeymap)),
+            };
+            xkb->indicators = XkbIndicatorPtr;
+        }
+        alloc();
+        init();
+        initColors();
+
+        setFocusPolicy(Qt::StrongFocus);
     }
-
-    XkbGetNames(getXDisplay(), XkbAllNamesMask, xkb);
-    l3mod = XkbKeysymToModifiers(getXDisplay(), XK_ISO_Level3_Shift);
-
-    alloc();
-    init();
-    initColors();
-
-    setFocusPolicy(Qt::StrongFocus);
+    #endif
 }
 
 void FreeXkbRF(XkbRF_RulesPtr rule) { XkbRF_Free(rule, true); }
@@ -565,6 +626,7 @@ bool KeyboardLayoutWidget::parseXkbColorSpec(char *colorspec, QColor &color) {
 }
 
 unsigned int KeyboardLayoutWidget::findKeycode(const char *keyName) {
+#ifdef ENABLE_X11
 #define KEYSYM_NAME_MAX_LENGTH 4
     unsigned int keycode;
     int i, j;
@@ -618,8 +680,13 @@ unsigned int KeyboardLayoutWidget::findKeycode(const char *keyName) {
     }
 
     return INVALID_KEYCODE;
+#else
+    if(clientState->XkbKeymap){
+        return xkb_keymap_key_by_name(clientState->XkbKeymap, keyName);
+    }
+    return XKB_KEYCODE_INVALID;
+#endif
 }
-
 void KeyboardLayoutWidget::rotateRectangle(int origin_x, int origin_y, int x,
                                            int y, int angle, int &rotated_x,
                                            int &rotated_y) {

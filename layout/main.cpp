@@ -21,13 +21,21 @@ int main(int argc, char *argv[]) {
     app.setApplicationName(QLatin1String("kbd-layout-viewer"));
     app.setApplicationVersion(QLatin1String(PROJECT_VERSION));
 
+    #ifdef ENABLE_X11
     if (app.platformName() != "xcb") {
         QMessageBox msgBox(QMessageBox::Critical, _("Error"),
                            _("This program only works on X11."));
         msgBox.exec();
         return 1;
     }
-
+    #else
+    if (app.platformName() != "wayland") {
+        QMessageBox msgBox(QMessageBox::Critical, _("Error"),
+                           _("This program only works on Wayland. For X11 support, Compile kbd-layout-viewer with ENABLE_X11 flag enabled."));
+        msgBox.exec();
+        return 1;
+    }
+    #endif
     QCommandLineParser parser;
     parser.setApplicationDescription(_("A general keyboard layout viewer"));
     parser.addHelpOption();
@@ -58,7 +66,7 @@ int main(int argc, char *argv[]) {
     mainWindow.setWindowIcon(QIcon::fromTheme("input-keyboard"));
     mainWindow.setWindowTitle(_("Keyboard Layout viewer"));
     mainWindow.setMinimumSize(QSize(900, 400));
-    fcitx::kcm::KeyboardLayoutWidget widget;
+    fcitx::kcm::KeyboardLayoutWidget widget(&mainWindow);
     if (group > 0 || layout.isNull()) {
         if (group < 0)
             group = 0;
