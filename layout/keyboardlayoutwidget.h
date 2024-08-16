@@ -74,6 +74,8 @@ struct Doodad : public DrawingItem {
 };
 
 #ifndef ENABLE_X11
+#define XkbNumIndicators 32
+typedef unsigned int Atom;
 typedef struct _XkbGeometry{
     // Atom name;
     unsigned short width_mm;

@@ -1496,8 +1496,12 @@ void KeyboardLayoutWidget::keyEvent(QKeyEvent *event) {
 }
 
 QString KeyboardLayoutWidget::keySymToString(unsigned long keysym) {
+    #ifdef ENABLE_X11
     if (keysym == 0 || keysym == XK_VoidSymbol)
-        return {};
+    #else
+    if (keysym == 0 || keysym == XKB_KEY_VoidSymbol)
+    #endif
+    return {};
 
     char32_t unicode = fcitx::Key::keySymToUnicode(
         fcitx::Key(static_cast<fcitx::KeySym>(keysym)).normalize().sym());
@@ -1510,12 +1514,29 @@ QString KeyboardLayoutWidget::keySymToString(unsigned long keysym) {
         !QChar::isSpace(unicode)) {
         text = QString::fromUcs4(&unicode, 1);
     } else {
+        #ifdef ENABLE_X11
         if (keysym == XK_Prior) {
+        #else
+        if (keysym == XKB_KEY_Prior) {
+        #endif
             text = "PgUp";
+        #ifdef ENABLE_X11
         } else if (keysym == XK_Next) {
+        #else
+         } else if (keysym == XKB_KEY_Next) {
+        #endif
             text = "PgDn";
         } else {
+            #ifdef ENABLE_X11
             text = QString(XKeysymToString(keysym));
+            #else
+            char buf[64];
+            if(xkb_keysym_get_name(keysym, buf, 64)){
+                text = QString(buf);
+            } else {
+                text = "NULL";
+            }
+            #endif
         }
     }
     if (text != "_") {
