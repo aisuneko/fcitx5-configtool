@@ -22,16 +22,9 @@
 class QPainter;
 struct Doodad;
 struct _XkbDesc;
-struct xkb_context;
 struct _XkbShapeDoodad;
+#ifdef ENABLE_X11
 union _XkbDoodad;
-
-#ifndef ENABLE_X11
-struct _XkbGeometry;
-struct _XkbIndicatorRec;
-struct _XkbNamesRec;
-struct _XkbDesc;
-struct _clientState;
 #endif
 
 typedef enum {
@@ -75,7 +68,153 @@ struct Doodad : public DrawingItem {
 
 #ifndef ENABLE_X11
 #define XkbNumIndicators 32
+#define	XkbOutlineDoodad	1
+#define	XkbSolidDoodad		2
+#define	XkbTextDoodad		3
+#define	XkbIndicatorDoodad	4
+#define	XkbLogoDoodad		5
 typedef unsigned int Atom;
+
+typedef struct _XkbColor {
+    unsigned int pixel;
+    char *spec;
+} XkbColorRec, *XkbColorPtr;
+
+typedef struct _XkbPoint {
+    short      x;
+    short      y;
+} XkbPointRec, *XkbPointPtr;
+
+typedef struct _XkbOutline {
+    unsigned short      num_points;
+    unsigned short      sz_points;
+    unsigned short      corner_radius;
+    XkbPointPtr         points;
+} XkbOutlineRec, *XkbOutlinePtr;
+
+typedef struct _XkbBounds {
+    short      x1,y1;
+    short      x2,y2;
+} XkbBoundsRec, *XkbBoundsPtr;
+
+typedef struct _XkbShape {
+    Atom              name;
+    unsigned short    num_outlines;
+    unsigned short    sz_outlines;
+    XkbOutlinePtr     outlines;
+    XkbOutlinePtr     approx;
+    XkbOutlinePtr     primary;
+    XkbBoundsRec      bounds;
+} XkbShapeRec, *XkbShapePtr;
+
+typedef struct {
+    char      name[4];
+} XkbKeyNameRec,*XkbKeyNamePtr;
+
+typedef struct _XkbKey {
+    XkbKeyNameRec    name;
+    short            gap;
+    unsigned char    shape_ndx;
+    unsigned char    color_ndx;
+} XkbKeyRec, *XkbKeyPtr;
+
+typedef struct _XkbRow {
+    short               top;
+    short               left;
+    unsigned short      num_keys;
+    // unsigned short      sz_keys;
+    int                 vertical;
+    XkbKeyPtr           keys;
+    // XkbBoundsRec        bounds;
+} XkbRowRec, *XkbRowPtr;
+
+typedef struct _XkbShapeDoodad {
+    Atom       name;
+    unsigned char      type;
+    unsigned char      priority;
+    short      top;
+    short      left;
+    short      angle;
+    unsigned short      color_ndx;
+    unsigned short      shape_ndx;
+} XkbShapeDoodadRec, *XkbShapeDoodadPtr;
+
+typedef struct _XkbTextDoodad {
+    Atom    name;
+    unsigned char   type;
+    unsigned char   priority;
+    short   top;
+    short   left;
+    short   angle;
+    short   width;
+    short   height;
+    unsigned short  color_ndx;
+    char    *text;
+    char    *font;
+} XkbTextDoodadRec, *XkbTextDoodadPtr;
+
+typedef struct _XkbIndicatorDoodad {
+    Atom    name;
+    unsigned char   type;
+    unsigned char   priority;
+    short   top;
+    short   left;
+    short   angle;
+    unsigned short  shape_ndx;
+    unsigned short  on_color_ndx;
+    unsigned short  off_color_ndx;
+} XkbIndicatorDoodadRec, *XkbIndicatorDoodadPtr;
+
+typedef struct _XkbLogoDoodad {
+    Atom    name;
+    unsigned char   type;
+    unsigned char   priority;
+    short   top;
+    short   left;
+    short   angle;
+    unsigned short  color_ndx;
+    unsigned short  shape_ndx;
+    char    *logo_name;
+} XkbLogoDoodadRec, *XkbLogoDoodadPtr;
+
+typedef struct _XkbAnyDoodad {
+    Atom    name;
+    unsigned char   type;
+    unsigned char   priority;
+    short   top;
+    short   left;
+    short   angle;
+} XkbAnyDoodadRec, *XkbAnyDoodadPtr;
+
+typedef union _XkbDoodad {
+    XkbAnyDoodadRec     any;
+    XkbShapeDoodadRec   shape;
+    XkbTextDoodadRec    text;
+    XkbIndicatorDoodadRec   indicator;
+    XkbLogoDoodadRec    logo;
+} XkbDoodadRec, *XkbDoodadPtr;
+
+
+typedef struct _XkbSection {
+    // Atom            name;
+    unsigned char   priority;
+    short           top;
+    short           left;
+    // unsigned short  width;
+    // unsigned short  height;
+    short           angle;
+    unsigned short  num_rows;
+    unsigned short  num_doodads;
+    // unsigned short  num_overlays;
+    // unsigned short  sz_rows;
+    // unsigned short  sz_doodads;
+    // unsigned short  sz_overlays;
+    XkbRowPtr       rows;
+    XkbDoodadPtr    doodads;
+    // XkbBoundsRec    bounds;
+    // XkbOverlayPtr   overlays;
+} XkbSectionRec, *XkbSectionPtr;
+
 typedef struct _XkbGeometry{
     // Atom name;
     unsigned short width_mm;
